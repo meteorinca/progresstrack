@@ -1,5 +1,5 @@
 /* ============================================
-   DataTracker – Main Application Logic
+   Moe Topics Tracker – Main Application Logic
    All data persisted to localStorage (no backend)
    ============================================ */
 
@@ -8,6 +8,7 @@
 
     // ── Storage helpers ──
     const STORAGE_KEY = 'datatracker_v1';
+    const THEME_KEY = 'datatracker_theme';
 
     function loadAll() {
         try {
@@ -23,8 +24,78 @@
         return 'trk_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
     }
 
+    // ── Theme ──
+    function loadTheme() {
+        const saved = localStorage.getItem(THEME_KEY);
+        // Default to light mode (no 'dark' class)
+        if (saved === 'dark') {
+            document.body.classList.add('dark');
+        } else {
+            document.body.classList.remove('dark');
+        }
+    }
+
+    function toggleTheme() {
+        document.body.classList.toggle('dark');
+        const isDark = document.body.classList.contains('dark');
+        localStorage.setItem(THEME_KEY, isDark ? 'dark' : 'light');
+    }
+
+    // Apply theme immediately
+    loadTheme();
+
+    // ── Sample data ──
+    function createSampleData() {
+        return {
+            trackers: [
+                {
+                    id: generateId(),
+                    title: 'Moe Topics Tracker',
+                    studentName: 'Josslyn Santiago',
+                    courseName: '6th grade math',
+                    defaultGoal: 90,
+                    units: [
+                        { name: 'Ratios, rates, & percentages', goal: 90, progress: 20 },
+                        { name: 'Arithmetic operations', goal: 90, progress: 30 },
+                        { name: 'Negative numbers', goal: 90, progress: 30 },
+                        { name: 'Properties of numbers', goal: 90, progress: 30 },
+                        { name: 'Variables & expressions', goal: 90, progress: 20 },
+                        { name: 'Equations & inequalities introduction', goal: 90, progress: 10 },
+                        { name: 'Geometry', goal: 90, progress: 0 },
+                        { name: 'Data & statistics', goal: 90, progress: 0 }
+                    ],
+                    createdAt: Date.now()
+                },
+                {
+                    id: generateId(),
+                    title: 'Moe Topics Tracker',
+                    studentName: 'Alex Rivera',
+                    courseName: '7th grade science',
+                    defaultGoal: 85,
+                    units: [
+                        { name: 'Cells & organisms', goal: 85, progress: 70 },
+                        { name: 'Human body systems', goal: 85, progress: 50 },
+                        { name: 'Ecology & ecosystems', goal: 85, progress: 40 },
+                        { name: 'Forces & motion', goal: 85, progress: 20 },
+                        { name: 'Energy & waves', goal: 85, progress: 10 },
+                        { name: 'Earth & space', goal: 85, progress: 0 }
+                    ],
+                    createdAt: Date.now() - 86400000
+                }
+            ],
+            activeId: null
+        };
+    }
+
     // ── State ──
     let state = loadAll();
+
+    // If no trackers, prepopulate with sample data
+    if (state.trackers.length === 0) {
+        state = createSampleData();
+        state.activeId = state.trackers[0].id;
+        saveAll(state);
+    }
 
     // ── DOM refs ──
     const $ = (sel) => document.querySelector(sel);
@@ -38,6 +109,11 @@
     const studentName = $('#studentName');
     const courseName = $('#courseName');
 
+    // Print header fields
+    const printStudentName = $('#printStudentName');
+    const printCourseName = $('#printCourseName');
+    const printGoal = $('#printGoal');
+
     // Modals
     const modalOverlay = $('#modalOverlay');
     const importOverlay = $('#importOverlay');
@@ -46,7 +122,7 @@
     const modalCourseName = $('#modalCourseName');
     const modalMasteryGoal = $('#modalMasteryGoal');
     const modalSave = $('#modalSave');
-    const importText = $('#importText');
+    const importTextEl = $('#importText');
     const importFile = $('#importFile');
     const fileUploadLabel = $('#fileUploadLabel');
 
@@ -116,9 +192,14 @@
         emptyState.style.display = 'none';
         trackerView.style.display = '';
 
-        bannerTitle.textContent = t.title || 'My Khan Academy Data Tracker';
+        bannerTitle.textContent = t.title || 'Moe Topics Tracker';
         studentName.value = t.studentName || '';
         courseName.value = t.courseName || '';
+
+        // Update print header
+        printStudentName.textContent = t.studentName || '';
+        printCourseName.textContent = t.courseName || '';
+        printGoal.textContent = (t.defaultGoal || 90) + '%';
 
         renderTable(t);
     }
@@ -297,7 +378,7 @@
             // Create new
             const newTracker = {
                 id: generateId(),
-                title: 'My Khan Academy Data Tracker',
+                title: 'Moe Topics Tracker',
                 studentName: sName,
                 courseName: cName,
                 defaultGoal: goal,
@@ -351,13 +432,13 @@
 
     // ── Import ──
     function openImport() {
-        importText.value = '';
+        importTextEl.value = '';
         importFile.value = '';
         fileUploadLabel.innerHTML = `
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             Choose file…`;
         importOverlay.style.display = '';
-        importText.focus();
+        importTextEl.focus();
     }
 
     function closeImport() {
@@ -365,7 +446,7 @@
     }
 
     function doImport() {
-        const raw = importText.value.trim();
+        const raw = importTextEl.value.trim();
         if (!raw) {
             showToast('Please paste data or upload a file.', 'error');
             return;
@@ -381,7 +462,7 @@
             if (jsonData) {
                 importJSON(jsonData);
             } else {
-                importText_(raw);
+                importTextData(raw);
             }
             closeImport();
         } catch (err) {
@@ -395,7 +476,7 @@
         trackers.forEach(d => {
             const t = {
                 id: generateId(),
-                title: d.title || 'My Khan Academy Data Tracker',
+                title: d.title || 'Moe Topics Tracker',
                 studentName: d.studentName || d.student || '',
                 courseName: d.courseName || d.course || '',
                 defaultGoal: d.defaultGoal || d.goal || 90,
@@ -415,7 +496,7 @@
         showToast('Imported successfully!', 'success');
     }
 
-    function importText_(raw) {
+    function importTextData(raw) {
         const lines = raw.split('\n').map(l => l.trim()).filter(l => l);
         let sName = '', cName = '', goal = 90;
         const units = [];
@@ -445,7 +526,7 @@
 
         const t = {
             id: generateId(),
-            title: 'My Khan Academy Data Tracker',
+            title: 'Moe Topics Tracker',
             studentName: sName,
             courseName: cName,
             defaultGoal: goal,
@@ -469,7 +550,7 @@
             ${escHtml(file.name)}`;
         const reader = new FileReader();
         reader.onload = (e) => {
-            importText.value = e.target.result;
+            importTextEl.value = e.target.result;
         };
         reader.readAsText(file);
     });
@@ -479,7 +560,7 @@
         const t = state.trackers.find(tr => tr.id === state.activeId);
         if (!t) return;
 
-        let txt = `MY KHAN ACADEMY DATA TRACKER\n`;
+        let txt = `MOE TOPICS TRACKER\n`;
         txt += `${'='.repeat(40)}\n\n`;
         txt += `Student: ${t.studentName}\n`;
         txt += `Course: ${t.courseName}\n`;
@@ -528,11 +609,22 @@
     // ── Banner field live-save ──
     studentName.addEventListener('change', () => {
         const t = state.trackers.find(tr => tr.id === state.activeId);
-        if (t) { t.studentName = studentName.value.trim(); persist(); renderSidebar(); }
+        if (t) {
+            t.studentName = studentName.value.trim();
+            printStudentName.textContent = t.studentName;
+            persist();
+            renderSidebar();
+        }
     });
     courseName.addEventListener('change', () => {
         const t = state.trackers.find(tr => tr.id === state.activeId);
-        if (t) { t.courseName = courseName.value.trim(); persist(); renderSidebar(); renderTable(t); }
+        if (t) {
+            t.courseName = courseName.value.trim();
+            printCourseName.textContent = t.courseName;
+            persist();
+            renderSidebar();
+            renderTable(t);
+        }
     });
 
     // ── Export dropdown toggle ──
@@ -561,6 +653,9 @@
     }
 
     // ── Event bindings ──
+    // Theme toggle
+    $('#themeToggle').addEventListener('click', toggleTheme);
+
     // Sidebar buttons
     $('#btnNewTracker').addEventListener('click', openNewModal);
     $('#btnImport').addEventListener('click', openImport);
@@ -610,10 +705,5 @@
     // ── Initial render ──
     renderSidebar();
     renderTracker();
-
-    // If no trackers, show a sample one to demonstrate
-    if (state.trackers.length === 0) {
-        // Show empty state, user will create or import
-    }
 
 })();
